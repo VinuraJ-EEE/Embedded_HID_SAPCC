@@ -25,10 +25,10 @@ int rowPins[ROWS] = {38, 39, 40, 41};   // OUTPUT — left side, 4 adjacent
 int colPins[COLS] = {42,  8, 17, 18};   // INPUT_PULLUP — debounce caps on these
 
 char keys[ROWS][COLS] = {
-  {'1', '2', '3', 'A'},
-  {'4', '5', '6', 'B'},
-  {'7', '8', '9', 'C'},
-  {'*', '0', '#', 'D'}
+  {'1', '2', '3', '4'},
+  {'5 ', '6', '7', '8'},
+  {'9', '10', '11', '12'},
+  {'13', '14', '15', '16'}
 };
 
 bool          prevState[ROWS][COLS]     = {};
@@ -66,60 +66,63 @@ void runAction(char key) {
 
     // ── App launchers (Win+R) ──
     case '1': winRun("calc");       break;  // Calculator
-    case '2': winRun("wps");        break;  // WPS Word
-    case '3': winRun("et");         break;  // WPS Sheets
-    case '4': winRun("wpp");        break;  // WPS Presentation
-    case '6': winRun("notepad");    break;  // Notepad
-
-    // ── Shortcuts ──
-    case '5':  // File Explorer  Win+E
-      combo(KEY_LEFT_GUI, 0, 'e');
+    case '2': winRun("word");        break;  // WPS Word
+    case '3': winRun("powerpoint");         break;  // WPS Sheets
+    case '4':
+      Consumer.press(CONSUMER_CONTROL_SCAN_NEXT);
+      Consumer.release();
       break;
-
+    case '5': winRun("excel");        break;  // WPS Presentation
+    case '6': winRun("notepad");    break;  // Notepad
     case '7':  // Task Manager  Ctrl+Shift+Esc
       combo(KEY_LEFT_CTRL, KEY_LEFT_SHIFT, KEY_ESC);
       break;
 
-    case '8':  // Snip & Sketch  Win+Shift+S
-      combo(KEY_LEFT_GUI, KEY_LEFT_SHIFT, 's');
-      break;
-
-    case '9':  // Lock screen  Win+L
-      combo(KEY_LEFT_GUI, 0, 'l');
-      break;
-
-    case 'D':  // Show desktop  Win+D
-      combo(KEY_LEFT_GUI, 0, 'd');
-      break;
-
-    case '*':  // Copy  Ctrl+C
-      combo(KEY_LEFT_CTRL, 0, 'c');
-      break;
-
-    case '#':  // Paste  Ctrl+V
-      combo(KEY_LEFT_CTRL, 0, 'v');
-      break;
-
-    // ── Media (Consumer HID — no keyboard needed) ──
-    case '0':
-      Consumer.press(CONSUMER_CONTROL_PLAY_PAUSE);
-      Consumer.release();
-      break;
-
-    case 'A':
-      Consumer.press(CONSUMER_CONTROL_SCAN_NEXT);
-      Consumer.release();
-      break;
-
-    case 'B':
+    case '8':
       Consumer.press(CONSUMER_CONTROL_SCAN_PREVIOUS);
       Consumer.release();
       break;
 
-    case 'C':
+
+    // ── Shortcuts ──
+    case '9':  // File Explorer  Win+E
+      combo(KEY_LEFT_GUI, 0, 'e');
+      break;
+
+   
+    case '10':  // Snip & Sketch  Win+Shift+S
+      combo(KEY_LEFT_GUI, KEY_LEFT_SHIFT, 's');
+      break;
+
+    case '11':  // Lock screen  Win+L
+      combo(KEY_LEFT_GUI, 0, 'l');
+      break;
+    
+    case '12':
       Consumer.press(CONSUMER_CONTROL_MUTE);
       Consumer.release();
       break;
+
+    case '13':  // Copy  Ctrl+C
+      combo(KEY_LEFT_CTRL, 0, 'c');
+      break;
+    
+    case '14 ':
+      Consumer.press(CONSUMER_CONTROL_PLAY_PAUSE);
+      Consumer.release();
+      break;
+
+    case '15':  // Paste  Ctrl+V
+      combo(KEY_LEFT_CTRL, 0, 'v');
+      break;
+
+    case '16':  // Show desktop  Win+D
+      combo(KEY_LEFT_GUI, 0, 'd');
+      break;
+
+        
+// ── Media (Consumer HID — no keyboard needed) ──
+     
   }
 }
 
