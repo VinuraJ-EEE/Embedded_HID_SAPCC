@@ -140,48 +140,54 @@ void sendConsumer(uint16_t bits) {
 }
 
 // ── ASCII → HID keycode ───────────────────────────────────────
-// Renamed struct from HIDKey to KeyMap to avoid conflict with HIDTypes.h
-struct KeyMap { uint8_t modifier; uint8_t keycode; };
+// Returns uint16_t with high byte = modifier, low byte = keycode
+// No struct used — avoids all HIDTypes.h naming conflicts
+uint16_t charToHID(char c) {
+  // helper macro: pack modifier and keycode into one uint16_t
+  #define PACK(mod, key) (((uint16_t)(mod) << 8) | (uint8_t)(key))
 
-KeyMap charToHID(char c) {
-  if (c >= 'a' && c <= 'z') return {0,           (uint8_t)(c - 'a' + 0x04)};
-  if (c >= 'A' && c <= 'Z') return {MOD_LSHIFT,  (uint8_t)(c - 'A' + 0x04)};
-  if (c >= '1' && c <= '9') return {0,            (uint8_t)(c - '1' + 0x1E)};
+  if (c >= 'a' && c <= 'z') return PACK(0,          c - 'a' + 0x04);
+  if (c >= 'A' && c <= 'Z') return PACK(MOD_LSHIFT, c - 'A' + 0x04);
+  if (c >= '1' && c <= '9') return PACK(0,           c - '1' + 0x1E);
+
   switch (c) {
-    case '0':  return {0,          0x27};
-    case ' ':  return {0,          0x2C};
-    case '\n': return {0,          0x28};
-    case '\\': return {0,          0x31};
-    case '{':  return {MOD_LSHIFT, 0x2F};
-    case '}':  return {MOD_LSHIFT, 0x30};
-    case '[':  return {0,          0x2F};
-    case ']':  return {0,          0x30};
-    case '_':  return {MOD_LSHIFT, 0x2D};
-    case '^':  return {MOD_LSHIFT, 0x23};
-    case '(':  return {MOD_LSHIFT, 0x26};
-    case ')':  return {MOD_LSHIFT, 0x27};
-    case '&':  return {MOD_LSHIFT, 0x24};
-    case '@':  return {MOD_LSHIFT, 0x1F};
-    case '=':  return {0,          0x2E};
-    case '+':  return {MOD_LSHIFT, 0x2E};
-    case '-':  return {0,          0x2D};
-    case '/':  return {0,          0x38};
-    case '*':  return {MOD_LSHIFT, 0x25};
-    case '.':  return {0,          0x37};
-    case ',':  return {0,          0x36};
-    case '>':  return {MOD_LSHIFT, 0x37};
-    case '<':  return {MOD_LSHIFT, 0x36};
-    default:   return {0,          0};
+    case '0':  return PACK(0,          0x27);
+    case ' ':  return PACK(0,          0x2C);
+    case '\n': return PACK(0,          0x28);
+    case '\\': return PACK(0,          0x31);
+    case '{':  return PACK(MOD_LSHIFT, 0x2F);
+    case '}':  return PACK(MOD_LSHIFT, 0x30);
+    case '[':  return PACK(0,          0x2F);
+    case ']':  return PACK(0,          0x30);
+    case '_':  return PACK(MOD_LSHIFT, 0x2D);
+    case '^':  return PACK(MOD_LSHIFT, 0x23);
+    case '(':  return PACK(MOD_LSHIFT, 0x26);
+    case ')':  return PACK(MOD_LSHIFT, 0x27);
+    case '&':  return PACK(MOD_LSHIFT, 0x24);
+    case '@':  return PACK(MOD_LSHIFT, 0x1F);
+    case '=':  return PACK(0,          0x2E);
+    case '+':  return PACK(MOD_LSHIFT, 0x2E);
+    case '-':  return PACK(0,          0x2D);
+    case '/':  return PACK(0,          0x38);
+    case '*':  return PACK(MOD_LSHIFT, 0x25);
+    case '.':  return PACK(0,          0x37);
+    case ',':  return PACK(0,          0x36);
+    case '>':  return PACK(MOD_LSHIFT, 0x37);
+    case '<':  return PACK(MOD_LSHIFT, 0x36);
+    default:   return PACK(0,          0);
   }
+  #undef PACK
 }
 
 // Type a full string character by character
 void typeString(const char* str) {
   if (!deviceConnected) return;
   for (int i = 0; str[i]; i++) {
-    KeyMap k = charToHID(str[i]);   // ← KeyMap, not HIDKey
-    if (k.keycode) {
-      sendKey(k.modifier, k.keycode);
+    uint16_t k       = charToHID(str[i]);
+    uint8_t  mod     = (uint8_t)(k >> 8);    // high byte = modifier
+    uint8_t  keycode = (uint8_t)(k & 0xFF);  // low byte  = keycode
+    if (keycode) {
+      sendKey(mod, keycode);
       sendKeyRelease();
       delay(8);
     }
@@ -230,7 +236,7 @@ void runAction(int key) {
   }
 }
 
-// ── Rotary encoder + pot ─────────────────────────────────────
+// ── Rotary encoder + pot ──────────────────────────────────────
 #define CLK     4
 #define DT      5
 #define SW      6
@@ -354,26 +360,22 @@ void startBLE() {
 void setup() {
   Serial.begin(115200);
 
-  // Encoder + pot
   pinMode(CLK, INPUT);
   pinMode(DT,  INPUT);
   pinMode(SW,  INPUT_PULLUP);
   lastStateCLK = digitalRead(CLK);
   analogReadResolution(12);
 
-  // Matrix rows
   for (int r = 0; r < ROWS; r++) {
     pinMode(rowPins[r], OUTPUT);
     digitalWrite(rowPins[r], HIGH);
   }
-  // Matrix cols
   for (int c = 0; c < COLS; c++) {
     pinMode(colPins[c], INPUT_PULLUP);
   }
 
   startBLE();
 
-  // WiFi
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
   int tries = 0;
