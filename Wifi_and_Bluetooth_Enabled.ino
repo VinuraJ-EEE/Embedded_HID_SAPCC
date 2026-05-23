@@ -19,7 +19,7 @@ BLECharacteristic* inputMouse;
 BLECharacteristic* inputConsumer;
 bool               deviceConnected = false;
 
-// Report IDs — must match the descriptor below
+// Report IDs
 #define REPORT_ID_KEYBOARD  1
 #define REPORT_ID_MOUSE     2
 #define REPORT_ID_CONSUMER  3
@@ -31,62 +31,58 @@ bool               deviceConnected = false;
 #define MOD_LGUI    0x08
 
 // ── HID Report Descriptor ─────────────────────────────────────
-// Describes 3 devices: keyboard, mouse, consumer control
 static const uint8_t hidReportDescriptor[] = {
 
-  // ── Keyboard (Report ID 1) — 8 bytes ──
-  // [modifier][reserved][key1][key2][key3][key4][key5][key6]
-  0x05,0x01,  0x09,0x06,  0xA1,0x01,      // Generic Desktop, Keyboard, Application
+  // ── Keyboard (Report ID 1) ──
+  0x05,0x01,  0x09,0x06,  0xA1,0x01,
   0x85,REPORT_ID_KEYBOARD,
-  0x05,0x07,  0x19,0xE0,  0x29,0xE7,      // Key codes, modifier range E0-E7
-  0x15,0x00,  0x25,0x01,                  // Logical 0-1
-  0x75,0x01,  0x95,0x08,  0x81,0x02,      // 8x 1-bit: modifier byte
-  0x95,0x01,  0x75,0x08,  0x81,0x01,      // 1x 8-bit: reserved
-  0x95,0x06,  0x75,0x08,                  // 6x 8-bit: key slots
+  0x05,0x07,  0x19,0xE0,  0x29,0xE7,
+  0x15,0x00,  0x25,0x01,
+  0x75,0x01,  0x95,0x08,  0x81,0x02,
+  0x95,0x01,  0x75,0x08,  0x81,0x01,
+  0x95,0x06,  0x75,0x08,
   0x15,0x00,  0x25,0x73,
   0x05,0x07,  0x19,0x00,  0x29,0x73,
-  0x81,0x00,  0xC0,                        // Array, End Collection
+  0x81,0x00,  0xC0,
 
-  // ── Mouse (Report ID 2) — 4 bytes ──
-  // [buttons][X][Y][wheel]
-  0x05,0x01,  0x09,0x02,  0xA1,0x01,      // Generic Desktop, Mouse
+  // ── Mouse (Report ID 2) ──
+  0x05,0x01,  0x09,0x02,  0xA1,0x01,
   0x85,REPORT_ID_MOUSE,
-  0x09,0x01,  0xA1,0x00,                  // Pointer, Physical
-  0x05,0x09,  0x19,0x01,  0x29,0x03,      // Buttons 1-3
+  0x09,0x01,  0xA1,0x00,
+  0x05,0x09,  0x19,0x01,  0x29,0x03,
   0x15,0x00,  0x25,0x01,
-  0x95,0x03,  0x75,0x01,  0x81,0x02,      // 3x 1-bit buttons
-  0x95,0x01,  0x75,0x05,  0x81,0x01,      // 5-bit padding
-  0x05,0x01,  0x09,0x30,  0x09,0x31,  0x09,0x38, // X, Y, Wheel
+  0x95,0x03,  0x75,0x01,  0x81,0x02,
+  0x95,0x01,  0x75,0x05,  0x81,0x01,
+  0x05,0x01,  0x09,0x30,  0x09,0x31,  0x09,0x38,
   0x15,0x81,  0x25,0x7F,
-  0x75,0x08,  0x95,0x03,  0x81,0x06,      // 3x 8-bit relative
-  0xC0, 0xC0,                              // End Physical, End Application
+  0x75,0x08,  0x95,0x03,  0x81,0x06,
+  0xC0, 0xC0,
 
-  // ── Consumer Control (Report ID 3) — 2 bytes ──
-  // Each bit = one consumer key
-  0x05,0x0C,  0x09,0x01,  0xA1,0x01,      // Consumer, Consumer Control
+  // ── Consumer Control (Report ID 3) ──
+  0x05,0x0C,  0x09,0x01,  0xA1,0x01,
   0x85,REPORT_ID_CONSUMER,
   0x15,0x00,  0x25,0x01,
-  0x75,0x01,  0x95,0x10,                  // 16x 1-bit (2 bytes)
-  0x09,0xE9,                               // Volume Increment
-  0x09,0xEA,                               // Volume Decrement
-  0x09,0xE2,                               // Mute
-  0x09,0xCD,                               // Play/Pause
-  0x09,0xB5,                               // Scan Next
-  0x09,0xB6,                               // Scan Previous
-  0x09,0xB7,                               // Stop
-  0x09,0xB3,                               // Fast Forward
-  0x09,0xB4,                               // Rewind
-  0x09,0x83,                               // Fast Forward (media)
-  0x09,0x30,                               // Power
-  0x09,0x40,                               // Menu
-  0x09,0x42,                               // Menu Pick
-  0x09,0x43,                               // Menu Up
-  0x09,0x44,                               // Menu Down
-  0x09,0x45,                               // Menu Left
-  0x81,0x02,  0xC0                         // Input, End Collection
+  0x75,0x01,  0x95,0x10,
+  0x09,0xE9,  // Volume Up
+  0x09,0xEA,  // Volume Down
+  0x09,0xE2,  // Mute
+  0x09,0xCD,  // Play/Pause
+  0x09,0xB5,  // Scan Next
+  0x09,0xB6,  // Scan Previous
+  0x09,0xB7,  // Stop
+  0x09,0xB3,  // Fast Forward
+  0x09,0xB4,  // Rewind
+  0x09,0x83,
+  0x09,0x30,
+  0x09,0x40,
+  0x09,0x42,
+  0x09,0x43,
+  0x09,0x44,
+  0x09,0x45,
+  0x81,0x02,  0xC0
 };
 
-// Consumer bit positions (matches descriptor order)
+// Consumer bit positions
 #define CON_VOL_UP    (1 << 0)
 #define CON_VOL_DOWN  (1 << 1)
 #define CON_MUTE      (1 << 2)
@@ -107,9 +103,7 @@ class ServerCallbacks : public BLEServerCallbacks {
   }
 };
 
-// ── Report send functions ─────────────────────────────────────
-
-// Send a keyboard report: modifier + up to 1 key
+// ── Send functions ────────────────────────────────────────────
 void sendKey(uint8_t modifier, uint8_t keycode) {
   if (!deviceConnected) return;
   uint8_t report[8] = {modifier, 0, keycode, 0, 0, 0, 0, 0};
@@ -118,7 +112,6 @@ void sendKey(uint8_t modifier, uint8_t keycode) {
   delay(10);
 }
 
-// Release all keyboard keys
 void sendKeyRelease() {
   if (!deviceConnected) return;
   uint8_t report[8] = {0};
@@ -127,7 +120,6 @@ void sendKeyRelease() {
   delay(10);
 }
 
-// Send mouse movement / scroll
 void sendMouse(int8_t x, int8_t y, int8_t wheel, uint8_t buttons = 0) {
   if (!deviceConnected) return;
   uint8_t report[4] = {buttons, (uint8_t)x, (uint8_t)y, (uint8_t)wheel};
@@ -135,10 +127,9 @@ void sendMouse(int8_t x, int8_t y, int8_t wheel, uint8_t buttons = 0) {
   inputMouse->notify();
 }
 
-// Send a consumer control key (press then release)
 void sendConsumer(uint16_t bits) {
   if (!deviceConnected) return;
-  uint8_t report[2] = {(uint8_t)(bits & 0xFF), (uint8_t)(bits >> 8)};
+  uint8_t report[2]  = {(uint8_t)(bits & 0xFF), (uint8_t)(bits >> 8)};
   inputConsumer->setValue(report, sizeof(report));
   inputConsumer->notify();
   delay(15);
@@ -149,9 +140,10 @@ void sendConsumer(uint16_t bits) {
 }
 
 // ── ASCII → HID keycode ───────────────────────────────────────
-struct HIDKey { uint8_t modifier; uint8_t keycode; };
+// Renamed struct from HIDKey to KeyMap to avoid conflict with HIDTypes.h
+struct KeyMap { uint8_t modifier; uint8_t keycode; };
 
-HIDKey charToHID(char c) {
+KeyMap charToHID(char c) {
   if (c >= 'a' && c <= 'z') return {0,           (uint8_t)(c - 'a' + 0x04)};
   if (c >= 'A' && c <= 'Z') return {MOD_LSHIFT,  (uint8_t)(c - 'A' + 0x04)};
   if (c >= '1' && c <= '9') return {0,            (uint8_t)(c - '1' + 0x1E)};
@@ -159,7 +151,7 @@ HIDKey charToHID(char c) {
     case '0':  return {0,          0x27};
     case ' ':  return {0,          0x2C};
     case '\n': return {0,          0x28};
-    case '\\': return {0,          0x31};  // backslash — for LaTeX cmds
+    case '\\': return {0,          0x31};
     case '{':  return {MOD_LSHIFT, 0x2F};
     case '}':  return {MOD_LSHIFT, 0x30};
     case '[':  return {0,          0x2F};
@@ -187,7 +179,7 @@ HIDKey charToHID(char c) {
 void typeString(const char* str) {
   if (!deviceConnected) return;
   for (int i = 0; str[i]; i++) {
-    HIDKey k = charToHID(str[i]);
+    KeyMap k = charToHID(str[i]);   // ← KeyMap, not HIDKey
     if (k.keycode) {
       sendKey(k.modifier, k.keycode);
       sendKeyRelease();
@@ -196,7 +188,7 @@ void typeString(const char* str) {
   }
 }
 
-// Press a key combo (modifier + key), then release
+// Press modifier + key combo then release
 void pressCombo(uint8_t modifier, uint8_t keycode) {
   sendKey(modifier, keycode);
   delay(80);
@@ -205,14 +197,13 @@ void pressCombo(uint8_t modifier, uint8_t keycode) {
 }
 
 // ── Equation editor helper ────────────────────────────────────
-// Alt+= opens the equation field in Word/WPS, then types the LaTeX cmd
 void insertEq(const char* cmd) {
   if (!deviceConnected) return;
-  pressCombo(MOD_LALT, 0x2E);  // Alt+= (0x2E = '=' keycode)
-  delay(400);                   // wait for equation field to open
+  pressCombo(MOD_LALT, 0x2E);  // Alt+= opens equation field
+  delay(400);
   typeString(cmd);
   delay(80);
-  sendKey(0, 0x2C);             // Space — renders LaTeX into symbol
+  sendKey(0, 0x2C);             // Space renders the LaTeX
   sendKeyRelease();
   delay(100);
 }
@@ -239,7 +230,7 @@ void runAction(int key) {
   }
 }
 
-// ── Rotary encoder ───────────────────────────────────────────
+// ── Rotary encoder + pot ─────────────────────────────────────
 #define CLK     4
 #define DT      5
 #define SW      6
@@ -332,7 +323,6 @@ void handleRoot() {
 <tr><td>15</td><td>Pi</td><td>π</td></tr>
 <tr><td>16</td><td>Vector</td><td>□⃗</td></tr>
 </table></div></body></html>)html";
-
   server.send(200, "text/html", page);
 }
 
@@ -342,28 +332,21 @@ void startBLE() {
   BLEServer* pServer = BLEDevice::createServer();
   pServer->setCallbacks(new ServerCallbacks());
 
-  hid = new BLEHIDDevice(pServer);
-
-  // Input report characteristics for each device
+  hid           = new BLEHIDDevice(pServer);
   inputKeyboard = hid->inputReport(REPORT_ID_KEYBOARD);
   inputMouse    = hid->inputReport(REPORT_ID_MOUSE);
   inputConsumer = hid->inputReport(REPORT_ID_CONSUMER);
 
-  // Device info
   hid->manufacturer()->setValue("ESP32Build");
-  hid->pnp(0x02, 0x05AC, 0x820A, 0x0210);   // Vendor/Product ID
-  hid->hidInfo(0x00, 0x01);                   // Country, Flags
-
-  // Set the combined report descriptor
+  hid->pnp(0x02, 0x05AC, 0x820A, 0x0210);
+  hid->hidInfo(0x00, 0x01);
   hid->reportMap((uint8_t*)hidReportDescriptor, sizeof(hidReportDescriptor));
   hid->startServices();
 
-  // Advertise as HID device
   BLEAdvertising* adv = pServer->getAdvertising();
   adv->setAppearance(HID_KEYBOARD);
   adv->addServiceUUID(hid->hidService()->getUUID());
   adv->start();
-
   Serial.println("BLE HID advertising — pair from your PC/phone");
 }
 
@@ -388,10 +371,9 @@ void setup() {
     pinMode(colPins[c], INPUT_PULLUP);
   }
 
-  // Start BLE HID
   startBLE();
 
-  // Start WiFi
+  // WiFi
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
   int tries = 0;
@@ -403,7 +385,7 @@ void setup() {
     server.on("/", handleRoot);
     server.begin();
   } else {
-    Serial.println("\nWiFi failed — BLE still works");
+    Serial.println("\nWiFi failed — BLE still works independently");
   }
 }
 
@@ -428,8 +410,8 @@ void loop() {
     if (lastVolume == -1) {
       lastVolume = volume;
     } else {
-      int steps = abs(volume - lastVolume);
-      uint16_t bit = (volume > lastVolume) ? CON_VOL_UP : CON_VOL_DOWN;
+      int      steps = abs(volume - lastVolume);
+      uint16_t bit   = (volume > lastVolume) ? CON_VOL_UP : CON_VOL_DOWN;
       for (int i = 0; i < steps; i++) {
         sendConsumer(bit);
         delay(2);
@@ -442,7 +424,7 @@ void loop() {
   bool currentButtonState = digitalRead(SW);
   if (lastButtonState == HIGH && currentButtonState == LOW) {
     if (deviceConnected) {
-      pressCombo(MOD_LGUI, 0x15);  // Win+R (r = 0x15)
+      pressCombo(MOD_LGUI, 0x15);  // Win+R
       delay(400);
       typeString("devmgmt.msc");
       delay(100);
