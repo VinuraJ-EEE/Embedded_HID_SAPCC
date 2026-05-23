@@ -203,37 +203,78 @@ class BLECallbacks : public BLEServerCallbacks {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  SECTION 6 — BLE send primitives
+//
+//  ROOT CAUSE of disconnects: calling notify() too rapidly fills the ESP32
+//  BLE TX queue, which causes the controller to reset the connection.
+//
+//  FIX: bleGate() enforces a minimum 20 ms between ANY two notify() calls.
+//  All send functions go through bleGate() first — no delays inside them.
+//  This keeps the BLE stack from being overwhelmed while still being fast
+//  enough for responsive typing (50 events/sec max).
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Global notify rate-limiter — 20 ms minimum between any two notify() calls
+static unsigned long _lastNotify = 0;
+
+void bleGate() {
+  unsigned long now = millis();
+  unsigned long gap = now - _lastNotify;
+  if (gap < 20) delay(20 - gap);   // block only as long as needed
+  _lastNotify = millis();
+}
 
 void bleKeyDown(uint8_t modifier, uint8_t keycode) {
   if (!bleConnected) return;
+  bleGate();
   uint8_t r[8] = {modifier, 0x00, keycode, 0, 0, 0, 0, 0};
   inputKeyboard->setValue(r, sizeof(r));
   inputKeyboard->notify();
-  delay(10);
 }
 
 void bleKeyUp() {
   if (!bleConnected) return;
+  bleGate();
   uint8_t r[8] = {0};
   inputKeyboard->setValue(r, sizeof(r));
   inputKeyboard->notify();
-  delay(10);
 }
 
 void bleMouse(int8_t x, int8_t y, int8_t wheel, uint8_t buttons = 0) {
   if (!bleConnected) return;
+  bleGate();
   uint8_t r[4] = {buttons, (uint8_t)x, (uint8_t)y, (uint8_t)wheel};
   inputMouse->setValue(r, sizeof(r));
   inputMouse->notify();
 }
 
+// Consumer: press + auto-release, both go through bleGate()
 void bleConsumer(uint16_t bits) {
   if (!bleConnected) return;
+  bleGate();
   uint8_t press[2]   = {(uint8_t)(bits & 0xFF), (uint8_t)(bits >> 8)};
+  inputConsumer->setValue(press, sizeof(press));
+  inputConsumer->notify();
+  bleGate();
   uint8_t release[2] = {0, 0};
-  inputConsumer->setValue(press,   sizeof(press));   inputConsumer->notify(); delay(15);
-  inputConsumer->setValue(release, sizeof(release)); inputConsumer->notify(); delay(10);
+  inputConsumer->setValue(release, sizeof(release));
+  inputConsumer->notify();
+}
+
+// Ctrl+scroll helper used by brightness and zoom pots
+void bleCtrlScroll(int8_t dir) {
+  if (!bleConnected) return;
+  bleGate();
+  uint8_t ctrlDown[8] = {MOD_LCTRL, 0, 0, 0, 0, 0, 0, 0};
+  inputKeyboard->setValue(ctrlDown, sizeof(ctrlDown));
+  inputKeyboard->notify();
+  bleGate();
+  uint8_t mouse[4] = {0, 0, 0, (uint8_t)dir};
+  inputMouse->setValue(mouse, sizeof(mouse));
+  inputMouse->notify();
+  bleGate();
+  uint8_t ctrlUp[8] = {0};
+  inputKeyboard->setValue(ctrlUp, sizeof(ctrlUp));
+  inputKeyboard->notify();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,31 +316,35 @@ uint16_t charToHID(char c) {
   #undef HID
 }
 
+// typeString: bleGate() inside bleKeyDown/Up ensures safe pacing
 void typeString(const char* str) {
   for (int i = 0; str[i] != '\0'; i++) {
-    uint16_t k = charToHID(str[i]);
-    uint8_t  mod = k >> 8, code = k & 0xFF;
-    if (code) { bleKeyDown(mod, code); bleKeyUp(); delay(8); }
+    uint16_t k    = charToHID(str[i]);
+    uint8_t  mod  = k >> 8, code = k & 0xFF;
+    if (code) {
+      bleKeyDown(mod, code);
+      bleKeyUp();
+      // Extra inter-character gap so OS doesn't merge consecutive keys
+      delay(20);
+    }
   }
 }
 
-// Press modifier combo (mod2 = 0 if only one modifier needed)
+// mod2 = 0 means only one modifier.  bleGate() inside primitives handles pacing.
 void pressCombo(uint8_t mod1, uint8_t mod2, uint8_t keycode) {
   bleKeyDown(mod1 | mod2, keycode);
-  delay(80);
+  delay(80);   // hold time — NOT a BLE send delay
   bleKeyUp();
-  delay(50);
 }
 
-// Win+R → type command → Enter  (opens Windows Run dialog)
+// Win+R → type command → Enter
 void winRun(const char* cmd) {
   pressCombo(MOD_LGUI, 0, KEY_R);
-  delay(500);               // wait for Run dialog to open
+  delay(500);          // wait for Windows Run dialog to open (OS latency)
   typeString(cmd);
-  delay(100);
-  bleKeyDown(0, 0x28);      // Enter
+  bleKeyDown(0, 0x28); // Enter
   bleKeyUp();
-  delay(300);
+  delay(200);          // wait for app to start launching
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -414,23 +459,20 @@ void IRAM_ATTR encoderISR() {
   }
 }
 
-// Called from loop — drains accumulated ticks and sends scroll events
+// Called from loop — sends ONE scroll tick per call, carries remainder forward.
+// Sending multiple ticks per loop iteration caused rapid notify() floods.
 void handleEncoder() {
   if (!bleConnected || encDelta == 0) return;
 
-  // Read and clear atomically
+  // Atomically take exactly ONE tick and leave the rest for next iteration
   noInterrupts();
-  int ticks = encDelta;
-  encDelta  = 0;
+  int tick = (encDelta > 0) ? 1 : -1;
+  encDelta -= tick;
   interrupts();
 
-  // Send one scroll event per tick
-  // Cap to ±10 per loop iteration so BLE isn't flooded
-  int send = constrain(ticks, -10, 10);
-  for (int i = 0; i < abs(send); i++) {
-    bleMouse(0, 0, (send > 0) ? 1 : -1);
-    delay(1);
-  }
+  bleMouse(0, 0, (int8_t)tick);
+  // bleGate() inside bleMouse already enforces 20 ms gap;
+  // remaining ticks will be sent in subsequent loop iterations
 }
 
 // Millis-based button debounce — no blocking delay()
@@ -451,49 +493,57 @@ void handleEncoderButton() {
   }
 }
 
+// ── Potentiometer state ──────────────────────────────────────────────────────
+// Each pot tracks its last stable value, last sent value, and a per-pot
+// send timestamp.  A pot event is only sent when:
+//   1. The value changed by more than the deadband (avoids noisy ADC jitter)
+//   2. At least POT_INTERVAL_MS has passed since the last send for that pot
+//      (prevents rapid-fire notify() floods when the knob moves quickly)
+// Only ONE step is sent per call regardless of how far the knob moved;
+// subsequent loop iterations will send further steps naturally.
+
+#define POT_DEADBAND    3    // ADC units (0–100 scale) to ignore as noise
+#define POT_INTERVAL_MS 60  // minimum ms between consecutive pot events
+
 int lastVolume     = -1;
 int lastBrightness = -1;
 int lastZoom       = -1;
 
+unsigned long volLastSent    = 0;
+unsigned long brightLastSent = 0;
+unsigned long zoomLastSent   = 0;
+
 void handleVolumePot() {
+  if (!bleConnected) return;
   int vol = map(analogRead(POT_VOLUME), 0, 4095, 0, 100);
-  if (!bleConnected || abs(vol - lastVolume) <= 2) { lastVolume = (lastVolume == -1) ? vol : lastVolume; return; }
-  if (lastVolume == -1) { lastVolume = vol; return; }
-  uint16_t bit   = (vol > lastVolume) ? CON_VOL_UP : CON_VOL_DOWN;
-  int      steps = abs(vol - lastVolume);
-  for (int i = 0; i < steps; i++) { bleConsumer(bit); delay(2); }
-  lastVolume = vol;
+  if (lastVolume == -1) { lastVolume = vol; return; }               // initialise
+  if (abs(vol - lastVolume) <= POT_DEADBAND) return;                // noise
+  if (millis() - volLastSent < POT_INTERVAL_MS) return;             // rate limit
+  bleConsumer((vol > lastVolume) ? CON_VOL_UP : CON_VOL_DOWN);
+  lastVolume   = vol;
+  volLastSent  = millis();
 }
 
 void handleBrightnessPot() {
-  // Brightness via Ctrl+scroll — most universally supported across OSes
+  if (!bleConnected) return;
   int bright = map(analogRead(POT_BRIGHTNESS), 0, 4095, 0, 100);
-  if (!bleConnected || abs(bright - lastBrightness) <= 2) { lastBrightness = (lastBrightness == -1) ? bright : lastBrightness; return; }
   if (lastBrightness == -1) { lastBrightness = bright; return; }
-  // Hold Ctrl and scroll — works as brightness in many fullscreen apps / presentation tools
-  // On Windows laptops, Fn+F keys are hardware-only; Ctrl+scroll is the BLE-compatible alternative
-  uint8_t ctrlHeld[8] = {MOD_LCTRL, 0, 0, 0, 0, 0, 0, 0};
-  inputKeyboard->setValue(ctrlHeld, sizeof(ctrlHeld));
-  inputKeyboard->notify();
-  delay(20);
-  bleMouse(0, 0, (bright > lastBrightness) ? 1 : -1);
-  delay(10);
-  bleKeyUp();
-  lastBrightness = bright;
+  if (abs(bright - lastBrightness) <= POT_DEADBAND) return;
+  if (millis() - brightLastSent < POT_INTERVAL_MS) return;
+  bleCtrlScroll((bright > lastBrightness) ? 1 : -1);
+  lastBrightness  = bright;
+  brightLastSent  = millis();
 }
 
 void handleZoomPot() {
+  if (!bleConnected) return;
   int zoom = map(analogRead(POT_ZOOM), 0, 4095, 0, 100);
-  if (!bleConnected || abs(zoom - lastZoom) <= 2) { lastZoom = (lastZoom == -1) ? zoom : lastZoom; return; }
   if (lastZoom == -1) { lastZoom = zoom; return; }
-  uint8_t ctrlHeld[8] = {MOD_LCTRL, 0, 0, 0, 0, 0, 0, 0};
-  inputKeyboard->setValue(ctrlHeld, sizeof(ctrlHeld));
-  inputKeyboard->notify();
-  delay(20);
-  bleMouse(0, 0, (zoom > lastZoom) ? 1 : -1);
-  delay(10);
-  bleKeyUp();
-  lastZoom = zoom;
+  if (abs(zoom - lastZoom) <= POT_DEADBAND) return;
+  if (millis() - zoomLastSent < POT_INTERVAL_MS) return;
+  bleCtrlScroll((zoom > lastZoom) ? 1 : -1);
+  lastZoom      = zoom;
+  zoomLastSent  = millis();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
