@@ -555,13 +555,12 @@ void setup() {
     Serial.println("\n[WiFi] Failed — BLE only");
   }
 
-  // ── Spawn tasks ────────────────────────────────────────────
-  //                              name         stack  arg  pri  handle  core
-  xTaskCreatePinnedToCore(taskBLE,   "BLE",   4096, NULL, 4, NULL, 1);
-  xTaskCreatePinnedToCore(taskInput, "INPUT", 3072, NULL, 3, NULL, 1);
-  xTaskCreatePinnedToCore(taskPots,  "POTS",  2048, NULL, 2, NULL, 0);
-  xTaskCreatePinnedToCore(taskWiFi,  "WIFI",  4096, NULL, 1, NULL, 0);
-}
+ // ── Spawn tasks ──────────────────────────────────────────────
+//                               name       stack    arg  pri  handle  core
+xTaskCreatePinnedToCore(taskBLE,   "BLE",  12288, NULL,  4, NULL,  1);
+xTaskCreatePinnedToCore(taskInput, "INP",   4096, NULL,  3, NULL,  1);
+xTaskCreatePinnedToCore(taskPots,  "POT",   3072, NULL,  2, NULL,  0);
+xTaskCreatePinnedToCore(taskWiFi,  "WIF",   8192, NULL,  1, NULL,  0);
 
 void loop() {
   // Intentionally empty — all work is in FreeRTOS tasks.
